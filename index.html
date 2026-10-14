@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Outlet Performance</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-muted:   #898781;
+    --grid:        #e1e0d9;
+    --baseline:    #c3c2b7;
+    --border:      rgba(11,11,11,0.10);
+    --accent:      #eb6834;   /* single orange accent */
+    --accent-wash: rgba(235,104,52,0.10);
+    --good:        #0ca30c;
+    --critical:    #d03b3b;
+    --good-wash:   rgba(12,163,12,0.10);
+    --critical-wash: rgba(208,59,59,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:        #0d0d0d;
+      --surface:     #1a1a19;
+      --ink:         #f0efec;
+      --ink-2:       #c3c2b7;
+      --ink-muted:   #898781;
+      --grid:        #2c2c2a;
+      --baseline:    #383835;
+      --border:      rgba(255,255,255,0.10);
+      --accent:      #d95926;
+      --accent-wash: rgba(217,89,38,0.14);
+      --good:        #0ca30c;
+      --critical:    #e66767;
+      --good-wash:   rgba(12,163,12,0.14);
+      --critical-wash: rgba(230,103,103,0.14);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:        #0d0d0d;
+    --surface:     #1a1a19;
+    --ink:         #f0efec;
+    --ink-2:       #c3c2b7;
+    --ink-muted:   #898781;
+    --grid:        #2c2c2a;
+    --baseline:    #383835;
+    --border:      rgba(255,255,255,0.10);
+    --accent:      #d95926;
+    --accent-wash: rgba(217,89,38,0.14);
+    --good:        #0ca30c;
+    --critical:    #e66767;
+    --good-wash:   rgba(12,163,12,0.14);
+    --critical-wash: rgba(230,103,103,0.14);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body { padding: 24px 20px 48px; }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .sub { font-size: 13px; color: var(--ink-muted); margin-top: 2px; }
+
+  /* filter pills */
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    appearance: none; border: 1px solid var(--border); background: var(--surface);
+    color: var(--ink-2); font-size: 13px; font-weight: 500; padding: 7px 14px;
+    border-radius: 999px; cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+  }
+  .pill:hover { background: var(--accent-wash); }
+  .pill[aria-pressed="true"] {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .kpi-label { font-size: 12px; color: var(--ink-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em; }
+  .kpi-value { font-size: 26px; font-weight: 650; margin-top: 6px; letter-spacing: -0.01em; }
+  .kpi-foot { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+  .kpi-foot.good { color: var(--good); }
+  .kpi-foot.critical { color: var(--critical); }
+
+  /* chart card */
+  .panel-title { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+  .panel-sub { font-size: 12px; color: var(--ink-muted); margin: 0 0 16px; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); margin-bottom: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  .chart { margin-bottom: 8px; }
+  .bars {
+    display: flex; align-items: flex-end; gap: 10px; height: 180px;
+    border-bottom: 1px solid var(--baseline); padding-bottom: 0; position: relative;
+  }
+  .bars::before {
+    /* 100% target reference line */
+    content: ""; position: absolute; left: 0; right: 0; top: 18px;
+    border-top: 1px dashed var(--grid);
+  }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; min-width: 0; }
+  .bar-val { font-size: 11px; color: var(--ink-2); font-weight: 600; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+  .bar {
+    width: 100%; max-width: 34px; border-radius: 4px 4px 0 0;
+    background: var(--good); transition: height .2s;
+  }
+  .bar.below { background: var(--critical); }
+  .bar-label { font-size: 10.5px; color: var(--ink-muted); margin-top: 8px; text-align: center; line-height: 1.3; }
+
+  /* attention list */
+  .attn-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 0; border-top: 1px solid var(--border);
+  }
+  .attn-item:first-of-type { border-top: none; }
+  .attn-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .attn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--critical); flex: none; }
+  .attn-name { font-size: 13.5px; font-weight: 600; }
+  .attn-week { font-size: 12px; color: var(--ink-muted); }
+  .attn-right { text-align: right; flex: none; }
+  .attn-pct { font-size: 13.5px; font-weight: 650; color: var(--critical); font-variant-numeric: tabular-nums; }
+  .attn-gap { font-size: 11.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .attn-empty { font-size: 13px; color: var(--ink-muted); padding: 10px 0; }
+
+  .grid-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Outlet performance</h1>
+        <div class="sub">Weekly sales vs. target &middot; Sep 2026</div>
+      </div>
+      <div class="filters" id="filters" role="group" aria-label="Filter by outlet"></div>
+    </header>
+
+    <section class="kpis" id="kpis"></section>
+
+    <section class="grid-2">
+      <div class="card">
+        <p class="panel-title">Sales vs. target by week</p>
+        <p class="panel-sub">Bar height is sales as % of target. Dashed line marks 100%.</p>
+        <div class="legend">
+          <span><i style="background:var(--good)"></i>At or above 90% of target</span>
+          <span><i style="background:var(--critical)"></i>Below 90% of target</span>
+        </div>
+        <div class="chart">
+          <div class="bars" id="bars"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="panel-title">Needs attention</p>
+        <p class="panel-sub">Outlet-weeks under 90% of target</p>
+        <div id="attention"></div>
+      </div>
+    </section>
+  </div>
+
+<script>
+/* ---------------------------------------------------------------------
+ * All data access goes through this one function. Swap the body for a
+ * Supabase query (e.g. supabase.from('outlet_weekly').select('*')) and
+ * everything downstream keeps working unchanged.
+ * ------------------------------------------------------------------- */
+async function loadData() {
+  const csv = `outlet,week,sales,target,orders,returns
+Tampines,2026-09-07,18400,18000,612,9
+Tampines,2026-09-14,16100,18000,540,14
+Tampines,2026-09-21,19200,18000,640,8
+Jurong,2026-09-07,14200,15000,488,11
+Jurong,2026-09-14,12600,15000,430,19
+Jurong,2026-09-21,15300,15000,512,10
+Orchard,2026-09-07,22500,24000,690,12
+Orchard,2026-09-14,20100,24000,612,21
+Orchard,2026-09-21,24800,24000,742,9`;
+
+  const [headerLine, ...lines] = csv.trim().split("\n");
+  const headers = headerLine.split(",");
+  return lines.map(line => {
+    const cells = line.split(",");
+    const row = {};
+    headers.forEach((h, i) => { row[h] = cells[i]; });
+    return {
+      outlet: row.outlet,
+      week: row.week,
+      sales: Number(row.sales),
+      target: Number(row.target),
+      orders: Number(row.orders),
+      returns: Number(row.returns),
+    };
+  });
+}
+
+const OUTLETS = ["All", "Tampines", "Jurong", "Orchard"];
+const THRESHOLD = 90;
+const fmtMoney = n => "$" + Math.round(n).toLocaleString();
+const fmtWeek = w => {
+  const d = new Date(w + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+let ALL_ROWS = [];
+let activeOutlet = "All";
+
+function filteredRows() {
+  return activeOutlet === "All" ? ALL_ROWS : ALL_ROWS.filter(r => r.outlet === activeOutlet);
+}
+
+function renderFilters() {
+  const el = document.getElementById("filters");
+  el.innerHTML = "";
+  OUTLETS.forEach(name => {
+    const btn = document.createElement("button");
+    btn.className = "pill";
+    btn.textContent = name;
+    btn.setAttribute("aria-pressed", String(name === activeOutlet));
+    btn.addEventListener("click", () => {
+      activeOutlet = name;
+      renderAll();
+    });
+    el.appendChild(btn);
+  });
+}
+
+function renderKPIs() {
+  const rows = filteredRows();
+  const totalSales = rows.reduce((s, r) => s + r.sales, 0);
+  const totalTarget = rows.reduce((s, r) => s + r.target, 0);
+  const totalOrders = rows.reduce((s, r) => s + r.orders, 0);
+  const totalReturns = rows.reduce((s, r) => s + r.returns, 0);
+  const pctTarget = totalTarget ? (totalSales / totalTarget) * 100 : 0;
+  const returnsPct = totalOrders ? (totalReturns / totalOrders) * 100 : 0;
+  const pctStatus = pctTarget >= THRESHOLD ? "good" : "critical";
+
+  const el = document.getElementById("kpis");
+  el.innerHTML = `
+    <div class="card">
+      <div class="kpi-label">Total sales</div>
+      <div class="kpi-value">${fmtMoney(totalSales)}</div>
+      <div class="kpi-foot">${fmtMoney(totalTarget)} target</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">% of target</div>
+      <div class="kpi-value">${pctTarget.toFixed(1)}%</div>
+      <div class="kpi-foot ${pctStatus}">${pctTarget >= THRESHOLD ? "On track" : "Below 90% threshold"}</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Orders</div>
+      <div class="kpi-value">${totalOrders.toLocaleString()}</div>
+      <div class="kpi-foot">across ${rows.length} outlet-week${rows.length === 1 ? "" : "s"}</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Returns</div>
+      <div class="kpi-value">${returnsPct.toFixed(1)}%</div>
+      <div class="kpi-foot">${totalReturns.toLocaleString()} of ${totalOrders.toLocaleString()} orders</div>
+    </div>
+  `;
+}
+
+function renderBars() {
+  const rows = filteredRows();
+  const el = document.getElementById("bars");
+  el.innerHTML = "";
+  rows.forEach(r => {
+    const pct = (r.sales / r.target) * 100;
+    const below = pct < THRESHOLD;
+    const heightPct = Math.min(pct, 130); // cap so one outlier doesn't flatten the rest
+    const col = document.createElement("div");
+    col.className = "bar-col";
+    col.innerHTML = `
+      <div class="bar-val">${pct.toFixed(0)}%</div>
+      <div class="bar ${below ? "below" : ""}" style="height:${heightPct}%"></div>
+      <div class="bar-label">${r.outlet}<br>${fmtWeek(r.week)}</div>
+    `;
+    el.appendChild(col);
+  });
+}
+
+function renderAttention() {
+  const rows = filteredRows()
+    .map(r => ({ ...r, pct: (r.sales / r.target) * 100 }))
+    .filter(r => r.pct < THRESHOLD)
+    .sort((a, b) => a.pct - b.pct);
+
+  const el = document.getElementById("attention");
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="attn-empty">No outlet-weeks below ${THRESHOLD}% of target.</div>`;
+    return;
+  }
+  el.innerHTML = rows.map(r => `
+    <div class="attn-item">
+      <div class="attn-main">
+        <span class="attn-dot"></span>
+        <div>
+          <div class="attn-name">${r.outlet}</div>
+          <div class="attn-week">Week of ${fmtWeek(r.week)}</div>
+        </div>
+      </div>
+      <div class="attn-right">
+        <div class="attn-pct">${r.pct.toFixed(0)}% of target</div>
+        <div class="attn-gap">${fmtMoney(r.target - r.sales)} short</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderAll() {
+  renderFilters();
+  renderKPIs();
+  renderBars();
+  renderAttention();
+}
+
+loadData().then(rows => {
+  ALL_ROWS = rows;
+  renderAll();
+});
+</script>
+</body>
+</html>
